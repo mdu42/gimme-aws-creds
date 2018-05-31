@@ -122,15 +122,15 @@ class GimmeAWSCreds(object):
             sys.exit(1)
 
     @staticmethod
-    def _get_sts_creds(partition, assertion, idp, role, duration=3600):
+    def _get_sts_creds(partition, assertion, idp, role, duration=3600, verify_ssl_certs=None):
         """ using the assertion and arns return aws sts creds """
 
         # Use the first available region for partitions other than the public AWS
         if partition != 'aws':
             regions = boto3.session.Session().get_available_regions('sts', partition)
-            client = boto3.client('sts', regions[0])
+            client = boto3.client('sts', region_name=regions[0], verify=verify_ssl_certs)
         else:
-            client = boto3.client('sts')
+            client = boto3.client('sts', verify=verify_ssl_certs)
 
         response = client.assume_role_with_saml(
             RoleArn=role,
@@ -430,11 +430,11 @@ class GimmeAWSCreds(object):
                 continue
 
             try:
-                aws_creds = self._get_sts_creds(aws_partition, saml_data['SAMLResponse'], role.idp, role.role, config.aws_default_duration)
+                aws_creds = self._get_sts_creds(aws_partition, saml_data['SAMLResponse'], role.idp, role.role, config.aws_default_duration, verify_ssl_certs=config.verify_ssl_certs)
             except ClientError as ex:
                 if ex.response['Error']['Message'] == 'The requested DurationSeconds exceeds the MaxSessionDuration set for this role.':
                     print("The requested session duration was too long for this role.  Falling back to 1 hour.")
-                    aws_creds = self._get_sts_creds(aws_partition, saml_data['SAMLResponse'], role.idp, role.role, 3600)
+                    aws_creds = self._get_sts_creds(aws_partition, saml_data['SAMLResponse'], role.idp, role.role, 3600, verify_ssl_certs=config.verify_ssl_certs)
             
             deriv_profname = re.sub('arn:aws:iam:.*/', '', role.role)
 
