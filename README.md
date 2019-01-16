@@ -22,9 +22,16 @@ Python 3
 ## Installation
 This is a Python 3 project.
 
-Install the latest gimme-aws-creds package direct from GitHub:
+Install/Upgrade from PyPi:
 ```bash
-pip3 install git+git://github.com/Nike-Inc/gimme-aws-creds.git
+pip3 install --upgrade gimme-aws-creds
+```
+
+__OR__
+
+Install/Upgrade the latest gimme-aws-creds package direct from GitHub:
+```bash
+pip3 install --upgrade git+git://github.com/Nike-Inc/gimme-aws-creds.git
 ```
 
 __OR__
@@ -33,6 +40,23 @@ Install the gimme-aws-creds package if you have already cloned the source:
 ```bash
 python3 setup.py install
 ```
+
+__OR__
+
+Build the docker image locally:
+```bash
+docker build -t gimme-aws-creds .
+```
+To make it easier you can also create an alias for the gimme-aws-creds command with docker:
+```bash
+# make sure you have the "~/.okta_aws_login_config" locally first!
+touch ~/.okta_aws_login_config && \
+alias gimme-aws-creds="docker run -it --rm \
+  -v ~/.aws/credentials:/root/.aws/credentials \
+  -v ~/.okta_aws_login_config:/root/.okta_aws_login_config \
+  gimme-aws-creds"
+```
+With this config, you will be able to run further commands seamlessly!
 
 ## Configuration
 
@@ -46,7 +70,7 @@ You can also set up different Okta configuration profiles, this useful if you ha
 gimme-aws-creds --configure --profile profileName
 ```
 
-A configuration wizard will prompt you to enter the necessary configuration parameters for the tool to run, the only one that is required is the `okta_org_url`. The configuration file is written to `~/.okta_aws_login_config`.
+A configuration wizard will prompt you to enter the necessary configuration parameters for the tool to run, the only one that is required is the `okta_org_url`. The configuration file is written to `~/.okta_aws_login_config`, but you can change the location with the environment variable `OKTA_CONFIG`.
 
 - conf_profile - This sets the Okta configuration profile name, the default is DEFAULT.
 - okta_org_url - This is your Okta organization url, which is typically something like `https://companyname.okta.com`.
@@ -56,7 +80,7 @@ A configuration wizard will prompt you to enter the necessary configuration para
 	- URL for gimme-creds-lambda
 	- 'internal' for direct interaction with the Okta APIs (`OKTA_API_KEY` environment variable required)
 	- 'appurl' to set an aws application link url. This setting removes the need of an OKTA API key.
-- write_aws_creds - y or n - If yes, the AWS credentials will be written to `~/.aws/credentials` otherwise it will be written to stdout.
+- write_aws_creds - True or False - If True, the AWS credentials will be written to `~/.aws/credentials` otherwise it will be written to stdout.
 - cred_profile - If writing to the AWS cred file, this sets the name of the AWS credential profile.  The reserved word 'role' will use the name component of the role arn as the profile name.  i.e. arn:aws:iam::123456789012:role/okta-1234-role becomes section [okta-1234-role] in the aws credentials file
 - aws_appname - This is optional. The Okta AWS App name, which has the role you want to assume.
 - aws_rolename - This is optional. The ARN of the role you want temporary AWS credentials for.  The reserved word 'all' can be used to get and store credentials for every role the user is permissioned for.
@@ -125,7 +149,7 @@ $ nosetests --verbosity=2 tests/
 This project is maintained by [Ann Wallace](https://github.com/anners), [Eric Pierce](https://github.com/epierce), and [Justin Wiley](https://github.com/sectornine50).
 
 ## Thanks and Credit
-I came across [okta_aws_login](https://github.com/nimbusscale/okta_aws_login) written by Joe Keegan, when I was searching for a CLI tool that generates AWS tokens via Okta. Unfortunately it hasn't been updated since 2015 and didn't seem to work with the current Okta version. But there was still some great code I was able to reuse under the MIT license for gimme-aws-creds. I have noted in the comments where I used his code, to make sure he receives proper credit.  
+I came across [okta_aws_login](https://github.com/nimbusscale/okta_aws_login) written by Joe Keegan, when I was searching for a CLI tool that generates AWS tokens via Okta. Unfortunately it hasn't been updated since 2015 and didn't seem to work with the current Okta version. But there was still some great code I was able to reuse under the MIT license for gimme-aws-creds. I have noted in the comments where I used his code, to make sure he receives proper credit.
 
 ## Etc.
 
