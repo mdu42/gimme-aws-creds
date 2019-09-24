@@ -463,6 +463,7 @@ class GimmeAWSCreds(object):
 
             aws_app = self._get_selected_app(conf_dict.get('aws_appname'), aws_results)
             saml_data = okta.get_saml_response(aws_app['links']['appLink'])
+<<<<<<< HEAD
 
             # hook for h&s model (we should have at this step saml token for inbound target IDP)
             # we need to athenticate again & perform a stepup authN if necessary
@@ -472,6 +473,14 @@ class GimmeAWSCreds(object):
                 # extract new orgname and build a new okta AuthN instance
                 targetorg = self._get_target_idp_orgname(saml_data['TargetUrl'])
                 okta = OktaClient(targetorg, config.verify_ssl_certs, conf_dict['device_token'])
+=======
+            aws_partition = self._get_partition_from_saml_acs(saml_data['TargetUrl'])
+
+            # hook for h&s model (we should have at this step saml token for inbound target IDP)
+            # we need to athenticate again & perform a stepup authN if necessary
+            if aws_partition == 'okta-idp':
+                # inbound
+>>>>>>> 7a9b3494d512000ffe208102f71988946d4df551
                 auth_result = okta.auth_saml(saml_data)
                 saml_data = okta.get_saml_response(conf_dict.get('app_relay_state'))
                 aws_partition = self._get_partition_from_saml_acs(saml_data['TargetUrl'])

@@ -14,7 +14,13 @@ import re
 import sys
 import time
 import uuid
+<<<<<<< HEAD
 
+=======
+import random
+import base64
+import hashlib
+>>>>>>> 7a9b3494d512000ffe208102f71988946d4df551
 from codecs import decode
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
@@ -460,7 +466,11 @@ class OktaClient(object):
             headers=self._get_headers(),
             verify=self._verify_ssl_certs
         )
+<<<<<<< HEAD
         print("Challenge with security keys ...", file=sys.stderr)
+=======
+        print("Challenge with U2F key ...", file=sys.stderr)
+>>>>>>> 7a9b3494d512000ffe208102f71988946d4df551
         response_data = response.json()
 
         if 'stateToken' in response_data:
@@ -540,8 +550,31 @@ class OktaClient(object):
             signature = b'fake'
             clientData = b'fake'
 
+<<<<<<< HEAD
         clientData = str(base64.urlsafe_b64encode(clientData), "utf-8")
         signatureData = str(base64.urlsafe_b64encode(signature), 'utf-8')
+=======
+        """ Call to U2F I/O """
+        registred_key = model.RegisteredKey(base64.urlsafe_b64decode(credentialId));
+        challenge_data = [{'key': registred_key, 'challenge': base64.urlsafe_b64decode(nonce)}];
+        nbTry = 3 # plugged U2F may not match the one enrolled, give 3 retries
+        while nbTry>0:
+            try:
+                api = authenticator.CreateCompositeAuthenticator(appId);
+                response = api.Authenticate(appId, challenge_data);
+                nbTry=0
+                print('Challenging U2F response to Okta....\n', file=sys.stderr)
+            except:
+                nbTry-=1
+                if nbTry > 0:
+                    print('No U2F device found or did not match enrolled key. \n', file=sys.stderr)
+                    input('Insert U2F key and press a key...')
+                else:
+                    response = {'signatureData': 'fake', 'clientData': 'fake'}
+
+        signatureData = response['signatureData']
+        clientData = response['clientData']
+>>>>>>> 7a9b3494d512000ffe208102f71988946d4df551
 
         response = self._http_client.post(
             login_data['_links']['next']['href'] + "?rememberDevice=false",
@@ -606,6 +639,7 @@ class OktaClient(object):
             api_response = self.stepup_auth(None, state_token)
             return api_response
 
+<<<<<<< HEAD
         # no MFA required => we should have a session cookies, login flow ends here
         api_response = {}
         api_response['status'] = 'SUCCESS'
@@ -613,6 +647,12 @@ class OktaClient(object):
         api_response['session'] = response.cookies['sid']
         api_response['device_token'] = self._http_client.cookies['DT']
         return api_response;
+=======
+        #state_token = decode(re.search(r"var stateToken = '(.*)';", response.text).group(1), "unicode-escape")
+        #api_response = self.stepup_auth(None, state_token)
+        #print(api_response['sessionToken'], file=sys.stderr)
+        return api_response; #TODO
+>>>>>>> 7a9b3494d512000ffe208102f71988946d4df551
 
     def get_saml_response(self, url):
         """ return the base64 SAML value object from the SAML Response"""
