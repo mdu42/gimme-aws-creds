@@ -53,6 +53,9 @@ class Config(object):
         self.action_store_json_creds = False
         self.output_format = 'export'
         self.roles = []
+        self.token = False
+        self.inbound = False
+        self.inbound_profile = None
 
         if self.ui.environ.get("OKTA_USERNAME") is not None:
             self.username = self.ui.environ.get("OKTA_USERNAME")
@@ -106,6 +109,20 @@ class Config(object):
             help='If set, perfom alias resolution.'
         )
         parser.add_argument(
+            '--token', '-t',
+            action='store_true',
+            help='If set, output the SAML token fetch from Authentication and do not authenticate against AWS'
+        )
+        parser.add_argument(
+            '--inbound', '-i',
+            action='store_true',
+            help='If set, authenticate through a SAML token'
+        )
+        parser.add_argument(
+            '--inbound-profile', '-s',
+            help='used with -i, specify the profile name to use for inbound authentication'
+        )        
+        parser.add_argument(
             '--insecure', '-k',
             action='store_true',
             help='Allow connections to SSL sites without cert verification.'
@@ -157,6 +174,10 @@ class Config(object):
             self.remember_device = True
         if args.resolve is True:
             self.resolve = True
+        if args.token is True:
+            self.token = True
+        if args.inbound is True:
+            self.inbound = True                        
         if args.output_format is not None:
             self.output_format = args.output_format
         if args.roles is not None:
@@ -217,6 +238,7 @@ class Config(object):
             'aws_default_duration': '3600',
             'device_token': '',
             'output_format': 'export',
+            'inbound_profile': ''
         }
 
         # See if a config file already exists.

@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import subprocess
 
 # extras
 import boto3
@@ -65,6 +66,12 @@ class GimmeAWSCreds(object):
                                 The MFA device will be remembered by Okta service for
                                 a limited time, otherwise, you will be prompted for it
                                 every time.
+          --token, -t           output the SAML token from AuthN and stop
+          --inbound, -i         authenticate through Inbound SAML, SAML token as input
+                                in stdin or through OKTA_TOKEN env var
+          --inbound-profile, -s
+                                profile name of the config to use to perform AuthN.
+                                To be used with -i flag
           --version             gimme-aws-creds version
 
         Config Options:
@@ -91,6 +98,7 @@ class GimmeAWSCreds(object):
         'OKTA_MFA_CODE',
         'OKTA_PASSWORD',
         'OKTA_USERNAME',
+        'OKTA_TOKEN'
     ]
 
     envvar_conf_map = {
@@ -194,6 +202,12 @@ class GimmeAWSCreds(object):
             return 'aws-cn'
         elif saml_acs_url == 'https://signin.amazonaws-us-gov.com/saml':
             return 'aws-us-gov'
+        elif '.okta-emea.com' in saml_acs_url:
+            return 'okta-idp'
+        elif '.okta.com' in saml_acs_url:
+            return 'okta-idp'
+        elif '.oktapreview.com' in saml_acs_url:
+            return 'okta-idp'
         else:
             raise errors.GimmeAWSCredsError("{} is an unknown ACS URL".format(saml_acs_url))
 
@@ -554,13 +568,19 @@ class GimmeAWSCreds(object):
                                                      auth_result['username'])
 
         elif self.gimme_creds_server == 'appurl':
-            auth_result = self.okta.auth_session()
             # bypass lambda & API call
             # Apps url is required when calling with appurl
             if self.conf_dict.get('app_url'):
                 self.config.app_url = self.conf_dict['app_url']
             if self.config.app_url is None:
                 raise errors.GimmeAWSCredsError('app_url is not defined in your config!')
+
+            if(self.config.inbound):
+                # perform authN with inbound SAML
+                auth_result = self.fetch_inbound_saml_token()
+            else:
+                # standard authN
+                auth_result = self.okta.auth_session()
 
             # build app list
             aws_results = []
@@ -724,6 +744,30 @@ class GimmeAWSCreds(object):
         self._cache['selected_aws_credentials'] = ret = list(self.iter_selected_aws_credentials())
         return ret
 
+    def fetch_inbound_saml_token(self):
+        if self.conf_dict.get('inbound_profile') is not None:
+            result = subprocess.run([sys.argv[0], "--profile", self.conf_dict.get('inbound_profile'), "-t"], 
+                stdout=subprocess.PIPE)
+            # fetch token
+            if result.returncode != 0:
+                raise errors.GimmeAWSCredsExitError('Inbound Authentication failed')
+            saml_token = result.stdout
+        elif self.conf_dict.get('okta_token') is not None:
+            saml_token = self.conf_dict.get('okta_token')
+        else:
+            # fetch token from stdin
+            saml_token = self.ui.input("")
+
+        # perform authN in the current org      
+        try:
+            inbound_saml_data = json.loads(saml_token)
+        except json.JSONDecodeError:
+            self.ui.warning('error parsing json')
+            raise errors.GimmeAWSCredsExitError('Invalid token in input')
+
+        auth_result = self.okta.auth_saml(inbound_saml_data)
+        return auth_result
+
     def _run(self):
         """ Pulling it all together to make the CLI """
         self.handle_action_configure()
@@ -732,24 +776,27 @@ class GimmeAWSCreds(object):
         self.handle_action_store_json_creds()
         self.handle_action_list_roles()
 
-        for data in self.iter_selected_aws_credentials():
-            write_aws_creds = str(self.conf_dict['write_aws_creds']) == 'True'
-            # check if write_aws_creds is true if so
-            # get the profile name and write out the file
-            if write_aws_creds:
-                self.write_aws_creds_from_data(data)
-                continue
+        if self.config.token:
+            self.ui.result(json.dumps(self.saml_data))
+        else:
+            for data in self.iter_selected_aws_credentials():
+                write_aws_creds = str(self.conf_dict['write_aws_creds']) == 'True'
+                # check if write_aws_creds is true if so
+                # get the profile name and write out the file
+                if write_aws_creds:
+                    self.write_aws_creds_from_data(data)
+                    continue
 
-            if self.output_format == 'json':
-                self.ui.result(json.dumps(data))
-                continue
+                if self.output_format == 'json':
+                    self.ui.result(json.dumps(data))
+                    continue
 
-            # Defaults to `export` format
-            self.ui.result('# ' + data['role']['arn'])
-            self.ui.result("export AWS_ACCESS_KEY_ID=" + data['credentials']['aws_access_key_id'])
-            self.ui.result("export AWS_SECRET_ACCESS_KEY=" + data['credentials']['aws_secret_access_key'])
-            self.ui.result("export AWS_SESSION_TOKEN=" + data['credentials']['aws_session_token'])
-            self.ui.result("export AWS_SECURITY_TOKEN=" + data['credentials']['aws_security_token'])
+                # Defaults to `export` format
+                self.ui.result('# ' + data['role']['arn'])
+                self.ui.result("export AWS_ACCESS_KEY_ID=" + data['credentials']['aws_access_key_id'])
+                self.ui.result("export AWS_SECRET_ACCESS_KEY=" + data['credentials']['aws_secret_access_key'])
+                self.ui.result("export AWS_SESSION_TOKEN=" + data['credentials']['aws_session_token'])
+                self.ui.result("export AWS_SECURITY_TOKEN=" + data['credentials']['aws_security_token'])
 
         self.config.clean_up()
 
