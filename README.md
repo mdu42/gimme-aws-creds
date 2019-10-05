@@ -214,6 +214,86 @@ for data in creds.iter_selected_aws_credentials():
 
 ```
 
+### Authentication to OKTA org through SAML token
+This mode works only for OKTA org which is configured to accept authentication from a third party Identity provider (aka Hub&Spoke or Org2Org if third party Identity Provider is another OKTA org) and only in `appurl` configuration
+
+To be able to authenticate you need to use the `-i` flag and provide from `stdin` a json containing the SAML token and the target Url, eg: `echo '{"SAMLResponse":"XXXXXXXX", "TargetUrl": "https://yourorg.okta-emea.com/sso/saml2/XXXXXXXXXXX"}' | gimme-aws-creds --profile myprofile -i`
+
+Authentication through pipeline assumes that your profile does not need interractive mode as stdin is piped to the subprocess stdout. If you required interractive mode you will need to define the `--inbound-profile MyIDPProfile` which will launch a subprocess command to fetch the SAML Token.
+
+A sample configuration using Org2Org authentication
+```
+[partner]
+okta_org_url = https://partner-org.okta-emea.com
+okta_auth_server = 
+client_id = 
+gimme_creds_server = appurl
+aws_appname = 
+aws_rolename =
+write_aws_creds = False
+cred_profile = whatever
+okta_username = 
+app_url = https://partner-org.okta-emea.com/home/target_app/XXXXXXXXXXXXX/XXXXXXXXXXXX?fromHome=true
+resolve_aws_alias = False
+preferred_mfa_type = 
+aws_default_duration =
+device_token = whatever
+
+[awsoktaorg]
+okta_org_url = https://awsokta-org.okta-emea.com
+okta_auth_server = 
+client_id = 
+gimme_creds_server = appurl
+aws_appname = 
+aws_rolename =
+write_aws_creds = False
+cred_profile = awsoktaorg
+okta_username =
+app_url = https://awsokta-org.okta-emea.com/home/amazon_aws/XXXXXXXXXXXXXXXXXX/XXX
+resolve_aws_alias = False
+preferred_mfa_type =
+aws_default_duration = 3600
+device_token = whatever
+inbound_profile = {0} --profile partner -t
+```
+
+Lauch org2org AuthN simply with :
+```bash
+gimme-aws-creds --profile awsoktaorg
+
+[Authentication in partner org ... ]
+
+Using password from keyring for XXXXXX
+Password for XXXXXX:
+Do you want to save this password in the keyring? (y/n) n
+
+[ ... tansparently authenticates in awsokta-org and prompt for factor in awsokta-org ... ]
+
+Multi-factor Authentication required.
+Pick a factor:
+[0] webauthn: webauthn
+[1] token:software:totp( GOOGLE ) : XXXX
+Selection: 0
+Challenge with security keys ...
+No FIDO device found
+Please insert your security key and press enter...
+
+Touch your authenticator device now...
+
+Pick a roles:
+[0] XXXXXXX
+[1] XXXXXXX
+Selections (comma separated): 0
+# XXXXXXXXX
+export AWS_ACCESS_KEY_ID=XXXXXXXXXXX
+export AWS_SECRET_ACCESS_KEY=XXXXXXXXXXX
+export AWS_SESSION_TOKEN=XXXXXXXXXXXXXXX
+export AWS_SECURITY_TOKEN=XXXXXXXXXXXX
+```
+
+### Use gimme-aws-creds to fetch an SAML token from an Okta Org (to be used in inbound SAML scenario)
+`gimme-aws-creds --profile xxxxx -t` will perform OKTA authentication and print to `stdout` a json containing a SAML token and the target ACS url.
+
 ## MFA security keys support
 
 gimme-aws-creds works both on FIDO1 enabled org and WebAuthN enabled org

@@ -202,12 +202,6 @@ class GimmeAWSCreds(object):
             return 'aws-cn'
         elif saml_acs_url == 'https://signin.amazonaws-us-gov.com/saml':
             return 'aws-us-gov'
-        elif '.okta-emea.com' in saml_acs_url:
-            return 'okta-idp'
-        elif '.okta.com' in saml_acs_url:
-            return 'okta-idp'
-        elif '.oktapreview.com' in saml_acs_url:
-            return 'okta-idp'
         else:
             raise errors.GimmeAWSCredsError("{} is an unknown ACS URL".format(saml_acs_url))
 
@@ -475,6 +469,10 @@ class GimmeAWSCreds(object):
             self.config.aws_default_duration = int(self.conf_dict['aws_default_duration'])
         else:
             self.config.aws_default_duration = 3600
+
+        # Inbound profile will set inbound flag
+        if self.conf_dict.get('inbound_profile') is not None:
+            self.config.inbound = True
 
         self.resolver = self.get_resolver()
         return config
@@ -746,8 +744,11 @@ class GimmeAWSCreds(object):
 
     def fetch_inbound_saml_token(self):
         if self.conf_dict.get('inbound_profile') is not None:
-            result = subprocess.run([sys.argv[0], "--profile", self.conf_dict.get('inbound_profile'), "-t"], 
-                stdout=subprocess.PIPE)
+            cmd = self.conf_dict.get('inbound_profile').split(" ")
+            if cmd[0] == "{0}":
+                cmd[0] = sys.argv[0]
+            #result = subprocess.run([sys.argv[0], "--profile", self.conf_dict.get('inbound_profile'), "-t"], 
+            result = subprocess.run(cmd, stdout=subprocess.PIPE)
             # fetch token
             if result.returncode != 0:
                 raise errors.GimmeAWSCredsExitError('Inbound Authentication failed')
