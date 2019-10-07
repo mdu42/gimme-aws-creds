@@ -215,7 +215,7 @@ for data in creds.iter_selected_aws_credentials():
 ```
 
 ### Authentication to OKTA org through SAML token
-This mode works only for OKTA org which is configured to accept authentication from a third party Identity provider (aka Hub&Spoke or Org2Org if third party Identity Provider is another OKTA org) and only in `appurl` configuration
+This mode works only for OKTA org which is configured to accept authentication from a third party Identity provider (see https://help.okta.com/en/prod/Content/Topics/Security/Identity_Providers.htm for more information) and only in `appurl` configuration
 
 To be able to authenticate you need to use the `-i` flag and provide from `stdin` a json containing the SAML token and the target Url, eg: `echo '{"SAMLResponse":"XXXXXXXX", "TargetUrl": "https://yourorg.okta-emea.com/sso/saml2/XXXXXXXXXXX"}' | gimme-aws-creds --profile myprofile -i`
 
@@ -257,7 +257,7 @@ device_token = whatever
 inbound_profile = {0} --profile partner -t
 ```
 
-Lauch org2org AuthN simply with :
+Launch org2org Authentication simply with :
 ```bash
 gimme-aws-creds --profile awsoktaorg
 
