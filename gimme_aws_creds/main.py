@@ -98,7 +98,8 @@ class GimmeAWSCreds(object):
         'OKTA_MFA_CODE',
         'OKTA_PASSWORD',
         'OKTA_USERNAME',
-        'OKTA_TOKEN'
+        'OKTA_TOKEN',
+        'OKTA_APPURL'
     ]
 
     envvar_conf_map = {
@@ -447,7 +448,7 @@ class GimmeAWSCreds(object):
 
     def run(self):
         try:
-            self._run()
+            return self._run()
         except errors.GimmeAWSCredsExitBase as exc:
             exc.handle()
 
@@ -521,7 +522,9 @@ class GimmeAWSCreds(object):
         elif self.conf_dict.get('okta_username'):
             okta.set_username(self.conf_dict['okta_username'])
 
-        if self.conf_dict.get('okta_password'):
+        if self.config.password is not None:
+            okta.set_password(self.config.password)
+        elif self.conf_dict.get('okta_password'):
             okta.set_password(self.conf_dict['okta_password'])
 
         if self.conf_dict.get('preferred_mfa_type'):
@@ -779,6 +782,8 @@ class GimmeAWSCreds(object):
 
         if self.config.token:
             self.ui.result(json.dumps(self.saml_data))
+            self.config.clean_up()
+            return self.saml_data
         else:
             for data in self.iter_selected_aws_credentials():
                 write_aws_creds = str(self.conf_dict['write_aws_creds']) == 'True'

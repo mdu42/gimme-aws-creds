@@ -32,12 +32,21 @@ class Config(object):
         """
         self.ui = ui
         self.FILE_ROOT = self.ui.HOME
-        self.OKTA_CONFIG = self.ui.environ.get(
-            'OKTA_CONFIG',
-            os.path.join(self.FILE_ROOT, '.okta_aws_login_config')
-        )
+        self.OKTA_CONFIG = configparser.ConfigParser()
+        self.OKTA_CONFIG['DEFAULT'] = {
+            'okta_org_url': 'https://myokta.okta-emea.com',
+            'gimme_creds_server': 'appurl',
+            'write_aws_creds': 'False',
+            'cred_profile': 'MY_DUMMY_PROFILE',
+            'app_url': self.ui.environ.get('OKTA_APPURL'),
+            'resolve_aws_alias': 'False',
+            'preferred_mfa_type': 'push',
+            'aws_default_duration': '3600',
+            'device_token': 'TTTTTTTT'
+        }
         self.action_register_device = False
         self.username = None
+        self.password = None
         self.api_key = None
         self.conf_profile = 'DEFAULT'
         self.verify_ssl_certs = True
@@ -74,6 +83,10 @@ class Config(object):
                  "also be set via the OKTA_USERNAME env variable. If not provided "
                  "you will be prompted to enter a username."
         )
+        parser.add_argument(
+            '--password', '-x',
+            help=""
+        )        
         parser.add_argument(
             '--action-configure', '--configure', '-c',
             action='store_true',
@@ -168,6 +181,8 @@ class Config(object):
 
         if args.username is not None:
             self.username = args.username
+        if args.password is not None:
+            self.password = args.password            
         if args.mfa_code is not None:
             self.mfa_code = args.mfa_code
         if args.remember_device:
@@ -188,16 +203,11 @@ class Config(object):
         """returns the conf dict from the okta config file"""
         # Check to see if config file exists, if not complain and exit
         # If config file does exist return config dict from file
-        if os.path.isfile(self.OKTA_CONFIG):
-            config = configparser.ConfigParser()
-            config.read(self.OKTA_CONFIG)
-
-            try:
-                return dict(config[self.conf_profile])
-            except KeyError:
-                raise errors.GimmeAWSCredsError(
-                    'Configuration profile not found! Use the --action-configure flag to generate the profile.')
-        raise errors.GimmeAWSCredsError('Configuration file not found! Use the --action-configure flag to generate file.')
+        try:
+            return dict(self.OKTA_CONFIG[self.conf_profile])
+        except KeyError:
+            raise errors.GimmeAWSCredsError(
+                'Configuration profile not found! Use the --action-configure flag to generate the profile.')
 
     def update_config_file(self):
         """
@@ -231,6 +241,7 @@ class Config(object):
             'write_aws_creds': '',
             'cred_profile': 'role',
             'okta_username': '',
+            'okta_password': '',
             'app_url': '',
             'resolve_aws_alias': 'n',
             'preferred_mfa_type': '',
@@ -531,4 +542,5 @@ class Config(object):
     def clean_up(self):
         """ clean up secret stuff"""
         del self.username
+        del self.password
         del self.api_key
