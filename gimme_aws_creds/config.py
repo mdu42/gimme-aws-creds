@@ -34,7 +34,7 @@ class Config(object):
         self.FILE_ROOT = self.ui.HOME
         self.OKTA_CONFIG = configparser.ConfigParser()
         self.OKTA_CONFIG['DEFAULT'] = {
-            'okta_org_url': 'https://myokta.okta-emea.com',
+            'okta_org_url': self.ui.environ.get('OKTA_URL'),
             'gimme_creds_server': 'appurl',
             'write_aws_creds': 'False',
             'cred_profile': 'MY_DUMMY_PROFILE',

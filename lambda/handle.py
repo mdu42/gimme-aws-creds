@@ -24,7 +24,7 @@ def lambda_handler(event, context):
             'body': json.dumps({})
         }
 
-    except Exception:
+    except BaseException:
         # Return HTTP status 200 but with no role in the response to indicate authentication failure
         return {
             'statusCode': 200,
