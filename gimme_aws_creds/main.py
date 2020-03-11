@@ -80,7 +80,7 @@ class GimmeAWSCreds(object):
            client_id = OAuth Client id for the gimme-creds-server
            okta_auth_server = Server ID for the OAuth authorization server used by gimme-creds-server
            write_aws_creds = Option to write creds to ~/.aws/credentials
-           cred_profile = Use DEFAULT or Role as the profile in ~/.aws/credentials
+           cred_profile = Use DEFAULT or Role-based name as the profile in ~/.aws/credentials
            aws_appname = (optional) Okta AWS App Name
            aws_rolename =  (optional) AWS Role ARN. 'ALL' will retrieve all roles, can be a CSV for multiple roles.
            okta_username = (optional) Okta User Name
@@ -126,8 +126,10 @@ class GimmeAWSCreds(object):
         # Check to see if the aws creds path exists, if not create it
         aws_config = aws_config or self.AWS_CONFIG
         creds_dir = os.path.dirname(aws_config)
+
         if os.path.exists(creds_dir) is False:
             os.makedirs(creds_dir)
+
         config = configparser.RawConfigParser()
 
         # Read in the existing config file if it exists
@@ -210,11 +212,12 @@ class GimmeAWSCreds(object):
         """ using the assertion and arns return aws sts creds """
 
         # Use the first available region for partitions other than the public AWS
+        session = boto3.session.Session(profile_name=None)
         if partition != 'aws':
-            regions = boto3.session.Session().get_available_regions('sts', partition)
-            client = boto3.client('sts', regions[0])
+            regions = session.get_available_regions('sts', partition)
+            client = session.client('sts', regions[0])
         else:
-            client = boto3.client('sts')
+            client = session.client('sts')
 
         response = client.assume_role_with_saml(
             RoleArn=role,
@@ -274,20 +277,41 @@ class GimmeAWSCreds(object):
         app_list = []
         for app in final_result:
             # All AWS connections have the same app name
-            if (app['appName'] == 'amazon_aws'):
-                newAppEntry = {}
-                newAppEntry['id'] = app['id']
-                newAppEntry['name'] = app['label']
-                newAppEntry['links'] = {}
-                newAppEntry['links']['appLink'] = app['linkUrl']
-                newAppEntry['links']['appLogo'] = app['logoUrl']
-                app_list.append(newAppEntry)
+            if app['appName'] == 'amazon_aws':
+                new_app_entry = {
+                    'id': app['id'],
+                    'name': app['label'],
+                    'links': {
+                        'appLink': app['linkUrl'],
+                        'appLogo': app['logoUrl']
+                    }
+                }
+                app_list.append(new_app_entry)
 
         # Throw an error if we didn't get any accounts back
         if not app_list:
             raise errors.GimmeAWSCredsError("No AWS accounts found.")
 
         return app_list
+
+    @staticmethod
+    def _parse_role_arn(arn):
+        """ Extracts account number, path and role name from role arn string """
+        matches = re.match(r"arn:(aws|aws-cn|aws-us-gov):iam:.*:(?P<accountid>\d{12}):role(?P<path>(/[\w/]+)?/)(?P<role>\S+)", arn)
+        return {
+            'account': matches.group('accountid'),
+            'role': matches.group('role'),
+            'path': matches.group('path')
+        }
+
+    @staticmethod
+    def _get_alias_from_friendly_name(friendly_name):
+        """ Extracts alias from friendly name string """
+        res = None
+        matches = re.match(r"Account:\s(?P<alias>.+)\s\(\d{12}\)", friendly_name)
+        if matches:
+            res = matches.group('alias')
+        return res
 
     def _choose_app(self, aws_info):
         """ gets a list of available apps and
@@ -455,7 +479,7 @@ class GimmeAWSCreds(object):
     def config(self):
         if 'config' in self._cache:
             return self._cache['config']
-        self._cache['config'] = config = Config(ui=self.ui)
+        self._cache['config'] = config = Config(gac_ui=self.ui)
         config.get_args()
         self._cache['conf_dict'] = config.get_config_dict()
 
@@ -547,9 +571,7 @@ class GimmeAWSCreds(object):
     def device_token(self):
         if self.config.action_register_device is True:
             self.conf_dict['device_token'] = None
-        elif not self.conf_dict.get('device_token'):
-            raise errors.GimmeAWSCredsError(
-                'No device token in configuration.  Try running --action-register-device again.')
+
         return self.conf_dict.get('device_token')
 
     @property
@@ -588,12 +610,12 @@ class GimmeAWSCreds(object):
 
             # build app list
             aws_results = []
-            newAppEntry = {}
-            newAppEntry['id'] = "fakeid"  # not used anyway
-            newAppEntry['name'] = "fakelabel"  # not used anyway
-            newAppEntry['links'] = {}
-            newAppEntry['links']['appLink'] = self.config.app_url
-            aws_results.append(newAppEntry)
+            new_app_entry = {
+                'id': 'fakeid',  # not used anyway
+                'name': 'fakelabel',  # not used anyway
+                'links': {'appLink': self.config.app_url}
+            }
+            aws_results.append(new_app_entry)
 
         # Use the gimme_creds_lambda service
         else:
@@ -709,23 +731,20 @@ class GimmeAWSCreds(object):
                 else:
                     self.ui.error('Failed to generate credentials for {} due to {}'.format(role.role, ex))
 
-        deriv_profname = re.sub('arn:(aws|aws-cn|aws-us-gov):iam:.*/', '', role.role)
+        naming_data = self._parse_role_arn(role.role)
         # set the profile name
-        # Note if there are multiple roles, and 'default' is
-        # selected it will be overwritten multiple times and last role
-        # wins.
-        if self.conf_dict['cred_profile'].lower() == 'default':
-            profile_name = 'default'
-        elif self.conf_dict['cred_profile'].lower() == 'role':
-            profile_name = deriv_profname
-        else:
-            profile_name = self.conf_dict['cred_profile']
+        # Note if there are multiple roles
+        # it will be overwritten multiple times and last role wins.
+        cred_profile = self.conf_dict['cred_profile'].lower()
+        resolve_alias = self.conf_dict['resolve_aws_alias']
+        include_path = self.conf_dict.get('include_path')
+        profile_name = self.get_profile_name(cred_profile, include_path, naming_data, resolve_alias, role)
 
         return {
             'shared_credentials_file': self.AWS_CONFIG,
             'profile': {
                 'name': profile_name,
-                'derived_name': deriv_profname,
+                'derived_name': naming_data['role'],
                 'config_name': self.conf_dict.get('cred_profile', ''),
             },
             'role': {
@@ -741,6 +760,27 @@ class GimmeAWSCreds(object):
                 'aws_security_token': aws_creds.get('SessionToken', ''),
             } if bool(aws_creds) else {}
         }
+
+    def get_profile_name(self, cred_profile, include_path, naming_data, resolve_alias, role):
+        if cred_profile == 'default':
+            profile_name = 'default'
+        elif cred_profile == 'role':
+            profile_name = naming_data['role']
+        elif cred_profile == 'acc-role':
+            account = naming_data['account']
+            role_name = naming_data['role']
+            path = naming_data['path']
+            if resolve_alias == 'True':
+                account_alias = self._get_alias_from_friendly_name(role.friendly_account_name)
+                if account_alias:
+                    account = account_alias
+            if include_path == 'True':
+                role_name = ''.join([path, role_name])
+            profile_name = '-'.join([account,
+                                     role_name])
+        else:
+            profile_name = cred_profile
+        return profile_name
 
     def iter_selected_aws_credentials(self):
         results = []
@@ -850,11 +890,20 @@ class GimmeAWSCreds(object):
 
     def handle_action_register_device(self):
         # Capture the Device Token and write it to the config file
-        if self.config.action_register_device is True:
+        if self.device_token is None or self.config.action_register_device is True:
+            if not self.config.action_register_device:
+                self.ui.notify('\n*** No device token found in configuration file, it will be created.')
+                self.ui.notify('*** You may be prompted for MFA more than once for this run.\n')
+
             auth_result = self.okta.auth_session()
             self.conf_dict['device_token'] = auth_result['device_token']
             self.config.write_config_file(self.conf_dict)
-            raise errors.GimmeAWSCredsExitSuccess('Device token saved!')
+            self.okta.device_token = self.conf_dict['device_token']
+
+            self.ui.notify('\nDevice token saved!\n')
+
+            if self.config.action_register_device is True:
+                raise errors.GimmeAWSCredsExitSuccess()
 
     def handle_action_list_roles(self):
         if self.config.action_list_roles:

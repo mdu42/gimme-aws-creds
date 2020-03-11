@@ -26,11 +26,11 @@ class Config(object):
        under the MIT license.
     """
 
-    def __init__(self, ui):
+    def __init__(self, gac_ui, create_config=True):
         """
-        :type ui: ui.UserInterface
+        :type gac_ui: ui.UserInterface
         """
-        self.ui = ui
+        self.ui = gac_ui
         self.FILE_ROOT = self.ui.HOME
         self.OKTA_CONFIG = self.ui.environ.get(
             'OKTA_CONFIG',
@@ -62,6 +62,10 @@ class Config(object):
 
         if self.ui.environ.get("OKTA_API_KEY") is not None:
             self.api_key = self.ui.environ.get("OKTA_API_KEY")
+
+        if create_config and not os.path.isfile(self.OKTA_CONFIG):
+            self.ui.notify('No gimme-aws-creds configuration file found, starting first-time configuration...')
+            self.update_config_file()
 
     def get_args(self):
         """Get the CLI args"""
@@ -193,7 +197,20 @@ class Config(object):
             config.read(self.OKTA_CONFIG)
 
             try:
-                return dict(config[self.conf_profile])
+                profile_config = dict(config[self.conf_profile])
+                if "inherits" in profile_config.keys():
+                    print("Using inherited config: " + profile_config["inherits"])
+                    if profile_config["inherits"] not in config:
+                        raise errors.GimmeAWSCredsError(self.conf_profile + " inherits from " + profile_config["inherits"] + ", but could not find " + profile_config["inherits"])
+                    combined_config = {
+                        **dict(config[profile_config["inherits"]]),
+                        **profile_config,
+                    }
+                    del combined_config["inherits"]
+                    return combined_config
+                else:
+                    return profile_config
+
             except KeyError:
                 raise errors.GimmeAWSCredsError(
                     'Configuration profile not found! Use the --action-configure flag to generate the profile.')
@@ -209,12 +226,13 @@ class Config(object):
                 client_id = OAuth Client id for the gimme-creds-server
                 okta_auth_server = Server ID for the OAuth authorization server used by gimme-creds-server
                 write_aws_creds = Option to write creds to ~/.aws/credentials
-                cred_profile = Use DEFAULT or Role as the profile in ~/.aws/credentials
+                cred_profile = Use DEFAULT or Role-based name as the profile in ~/.aws/credentials
                 aws_appname = (optional) Okta AWS App Name
                 aws_rolename =  (optional) Okta Role ARN
                 okta_username = Okta username
                 aws_default_duration = Default AWS session duration (3600)
                 preferred_mfa_type = Select this MFA device type automatically
+                include_path - (optional) includes that full role path to the role name for profile
 
         """
         config = configparser.ConfigParser()
@@ -233,6 +251,7 @@ class Config(object):
             'okta_username': '',
             'app_url': '',
             'resolve_aws_alias': 'n',
+            'include_path': 'n',
             'preferred_mfa_type': '',
             'remember_device': 'n',
             'aws_default_duration': '3600',
@@ -267,6 +286,7 @@ class Config(object):
         if config_dict['gimme_creds_server'] != 'appurl':
             config_dict['aws_appname'] = self._get_aws_appname(defaults['aws_appname'])
         config_dict['resolve_aws_alias'] = self._get_resolve_aws_alias(defaults['resolve_aws_alias'])
+        config_dict['include_path'] = self._get_include_path(defaults['include_path'])
         config_dict['aws_rolename'] = self._get_aws_rolename(defaults['aws_rolename'])
         config_dict['okta_username'] = self._get_okta_username(defaults['okta_username'])
         config_dict['aws_default_duration'] = self._get_aws_default_duration(defaults['aws_default_duration'])
@@ -276,8 +296,7 @@ class Config(object):
 
         # If write_aws_creds is True get the profile name
         if config_dict['write_aws_creds'] is True:
-            config_dict['cred_profile'] = self._get_cred_profile(
-                defaults['cred_profile'])
+            config_dict['cred_profile'] = self._get_cred_profile(defaults['cred_profile'])
         else:
             config_dict['cred_profile'] = defaults['cred_profile']
 
@@ -299,7 +318,7 @@ class Config(object):
         okta_org_url = default_entry
 
         while okta_org_url_valid is False:
-            okta_org_url = self._get_user_input("Okta URL for your organization", default_entry)
+            okta_org_url = self._get_user_input("Okta URL for your organization", default_entry).strip('/')
             # Validate that okta_org_url is a well formed okta URL
             url_parse_results = urlparse(okta_org_url)
 
@@ -390,6 +409,19 @@ class Config(object):
             except ValueError:
                 ui.default.warning("Write AWS Credentials must be either y or n.")
 
+    def _get_include_path(self, default_entry):
+        """ Option to include path from rolename """
+
+        ui.default.message(
+            "Do you want to include full role path to the role name in AWS credential profile name?"
+            "\nPlease answer y or n.")
+
+        while True:
+            try:
+                return self._get_user_input_yes_no("Include Path", default_entry)
+            except ValueError:
+                ui.default.warning("Include Path must be either y or n.")
+
     def _get_resolve_aws_alias(self, default_entry):
         """ Option to resolve account id to alias """
         ui.default.message(
@@ -406,6 +438,7 @@ class Config(object):
         ui.default.message(
             "The AWS credential profile defines which profile is used to store the temp AWS creds.\n"
             "If set to 'role' then a new profile will be created matching the role name assumed by the user.\n"
+            "If set to 'acc-role' then a new profile will be created matching the role name assumed by the user, but prefixed with account number to avoid collisions.\n"
             "If set to 'default' then the temp creds will be stored in the default profile\n"
             "If set to any other value, the name of the profile will match that value."
         )
@@ -413,7 +446,7 @@ class Config(object):
         cred_profile = self._get_user_input(
             "AWS Credential Profile", default_entry)
 
-        if cred_profile.lower() in ['default', 'role']:
+        if cred_profile.lower() in ['default', 'role', 'acc-role']:
             cred_profile = cred_profile.lower()
 
         return cred_profile
