@@ -258,14 +258,17 @@ for data in creds.iter_selected_aws_credentials():
 ```
 
 ### Authentication to OKTA org through SAML token
-This mode works only for OKTA org which is configured to accept authentication from a third party Identity provider (see https://help.okta.com/en/prod/Content/Topics/Security/Identity_Providers.htm for more information) and only in `appurl` configuration
+This mode works only for OKTA org which is configured to accept authentication from a third party Identity provider (see https://help.okta.com/en/prod/Content/Topics/Security/Identity_Providers.htm for more information)
 
-To be able to authenticate you need to use the `-i` flag and provide from `stdin` a json containing the SAML token and the target Url, eg: `echo '{"SAMLResponse":"XXXXXXXX", "TargetUrl": "https://yourorg.okta-emea.com/sso/saml2/XXXXXXXXXXX"}' | gimme-aws-creds --profile myprofile -i`
+To be able to authenticate you need to use the `-i` flag and provide from `stdin` a json containing the SAML token and the target Url, eg: 
+```bash
+echo '{"SAMLResponse":"XXXXXXXX", "TargetUrl": "https://yourorg.okta-emea.com/sso/saml2/XXXXXXXXXXX"}' | gimme-aws-creds --profile myprofile -i
+```
 
 Authentication through pipeline assumes that your profile does not need interractive mode as stdin is piped to the subprocess stdout. If you required interractive mode you will need to define the `--inbound-profile MyIDPProfile` which will launch a subprocess command to fetch the SAML Token.
 
-A sample configuration using Org2Org authentication
-```
+A sample configuration using Org2Org authentication could be:
+```ini
 [partner]
 okta_org_url = https://partner-org.okta-emea.com
 okta_auth_server = 
@@ -335,7 +338,10 @@ export AWS_SECURITY_TOKEN=XXXXXXXXXXXX
 ```
 
 ### Use gimme-aws-creds to fetch an SAML token from an Okta Org (to be used in inbound SAML scenario)
-`gimme-aws-creds --profile xxxxx -t` will perform OKTA authentication and print to `stdout` a json containing a SAML token and the target ACS url.
+```bash
+gimme-aws-creds --profile xxxxx -t
+``` 
+will perform OKTA authentication and print to `stdout` a json containing a SAML token and the target ACS url.
 
 ## MFA security keys support
 
