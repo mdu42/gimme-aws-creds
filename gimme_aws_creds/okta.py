@@ -794,3 +794,78 @@ class OktaClient(object):
             func_result['stateToken'] = response_data['stateToken']
 
         return func_result
+
+    def auth_oauth_saml(self, client_id, **kwargs):
+        """ Login to Okta and retrieve access token, ID token or both """
+        # assume we already got a session from the saml token and that we have the session cookies
+
+        if 'access_token' not in kwargs:
+            access_token = True
+        else:
+            access_token = kwargs['access_token']
+
+        if 'id_token' not in kwargs:
+            id_token = False
+        else:
+            id_token = kwargs['id_token']
+
+        if 'scopes' not in kwargs:
+            scopes = ['openid']
+        else:
+            scopes = kwargs['scopes']
+
+        response_types = []
+        if id_token is True:
+            response_types.append('id_token')
+        if access_token is True:
+            response_types.append('token')
+
+        if 'authorization_server' not in kwargs:
+            oauth_url = self._okta_org_url + '/oauth2/v1/authorize'
+        else:
+            oauth_url = self._okta_org_url + '/oauth2/' + kwargs['authorization_server'] + '/v1/authorize'
+
+        if 'redirect_uri' not in kwargs:
+            redirect_uri = 'http://localhost:8080/login'
+        else:
+            redirect_uri = kwargs['redirect_uri']
+
+        if 'nonce' not in kwargs:
+            nonce = uuid.uuid4().hex
+        else:
+            nonce = kwargs['nonce']
+
+        if 'state' not in kwargs:
+            state = 'auth_oauth'
+        else:
+            state = kwargs['state']
+
+        params = {
+            'client_id': client_id,
+            'redirect_uri': redirect_uri,
+            'nonce': nonce,
+            'state': state,
+            'response_type': ' '.join(response_types),
+            'scope': ' '.join(scopes)
+        }
+
+        response = self._http_client.get(
+            oauth_url,
+            params=params,
+            headers=self._get_headers(),
+            verify=self._verify_ssl_certs,
+            allow_redirects=False
+        )
+
+        url_parse_results = urlparse(response.headers['Location'])
+        query_result = parse_qs(url_parse_results.fragment)
+
+        tokens = {}
+        if 'access_token' in query_result:
+            tokens['access_token'] = query_result['access_token'][0]
+            self._oauth_access_token = query_result['access_token'][0]
+        if 'id_token' in query_result:
+            tokens['id_token'] = query_result['id_token'][0]
+            self._oauth_id_token = query_result['id_token'][0]
+
+        return tokens

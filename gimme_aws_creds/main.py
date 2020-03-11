@@ -561,7 +561,13 @@ class GimmeAWSCreds(object):
             # Okta API key is required when calling Okta APIs internally
             if self.config.api_key is None:
                 raise errors.GimmeAWSCredsError('OKTA_API_KEY environment variable not found!')
-            auth_result = self.okta.auth_session()
+            if(self.config.inbound):
+                # perform authN with inbound SAML
+                auth_result = self.fetch_inbound_saml_token()
+            else:
+                # standard authN
+                auth_result = self.okta.auth_session()
+
             aws_results = self._get_aws_account_info(self.okta_org_url, self.config.api_key,
                                                      auth_result['username'])
 
@@ -597,14 +603,26 @@ class GimmeAWSCreds(object):
                 raise errors.GimmeAWSCredsError(
                     'No OAuth Authorization server in configuration.  Try running --config again.')
 
-            # Authenticate with Okta and get an OAuth access token
-            self.okta.auth_oauth(
+            if(self.config.inbound):
+                # perform authN with inbound SAML
+                self.fetch_inbound_saml_token()
+                self.okta.auth_oauth_saml(
                 self.conf_dict['client_id'],
-                authorization_server=self.conf_dict['okta_auth_server'],
-                access_token=True,
-                id_token=False,
-                scopes=['openid']
-            )
+                    authorization_server=self.conf_dict['okta_auth_server'],
+                    access_token=True,
+                    id_token=False,
+                    scopes=['openid']
+                )
+            else:
+                # standard authN
+                # Authenticate with Okta and get an OAuth access token
+                self.okta.auth_oauth(
+                    self.conf_dict['client_id'],
+                    authorization_server=self.conf_dict['okta_auth_server'],
+                    access_token=True,
+                    id_token=False,
+                    scopes=['openid']
+                )
 
             # Add Access Tokens to Okta-protected requests
             self.okta.use_oauth_access_token(True)
