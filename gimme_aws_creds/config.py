@@ -57,9 +57,6 @@ class Config(object):
         if self.ui.environ.get("OKTA_USERNAME") is not None:
             self.username = self.ui.environ.get("OKTA_USERNAME")
 
-        if self.ui.environ.get("OKTA_API_KEY") is not None:
-            self.api_key = self.ui.environ.get("OKTA_API_KEY")
-
         if create_config and not os.path.isfile(self.OKTA_CONFIG):
             self.ui.notify('No gimme-aws-creds configuration file found, starting first-time configuration...')
             self.update_config_file()
@@ -202,8 +199,6 @@ class Config(object):
            Config Options:
                 okta_org_url = Okta URL
                 gimme_creds_server = URL of the gimme-creds-server or 'internal' for local processing or 'appurl' when app url available
-                client_id = OAuth Client id for the gimme-creds-server
-                okta_auth_server = Server ID for the OAuth authorization server used by gimme-creds-server
                 write_aws_creds = Option to write creds to ~/.aws/credentials
                 cred_profile = Use DEFAULT or Role-based name as the profile in ~/.aws/credentials
                 aws_appname = (optional) Okta AWS App Name
@@ -220,8 +215,6 @@ class Config(object):
 
         defaults = {
             'okta_org_url': '',
-            'okta_auth_server': '',
-            'client_id': '',
             'gimme_creds_server': 'appurl',
             'aws_appname': '',
             'aws_rolename': ','.join(self.roles),
@@ -256,9 +249,6 @@ class Config(object):
 
         if config_dict['gimme_creds_server'] == 'appurl':
             config_dict['app_url'] = self._get_appurl_entry(defaults['app_url'])
-        elif config_dict['gimme_creds_server'] != 'internal':
-            config_dict['client_id'] = self._get_client_id_entry(defaults['client_id'])
-            config_dict['okta_auth_server'] = self._get_auth_server_entry(defaults['okta_auth_server'])
 
         config_dict['write_aws_creds'] = self._get_write_aws_creds(defaults['write_aws_creds'])
         if config_dict['gimme_creds_server'] != 'appurl':
@@ -309,26 +299,6 @@ class Config(object):
         self._okta_org_url = okta_org_url
 
         return okta_org_url
-
-    def _get_auth_server_entry(self, default_entry):
-        """ Get and validate okta_auth_server """
-        ui.default.message(
-            "Enter the OAuth authorization server for the gimme-creds-server. If you do not know this value, contact your Okta admin")
-
-        okta_auth_server = self._get_user_input("Authorization server", default_entry)
-        self._okta_auth_server = okta_auth_server
-
-        return okta_auth_server
-
-    def _get_client_id_entry(self, default_entry):
-        """ Get and validate client_id """
-        ui.default.message(
-            "Enter the OAuth client id for the gimme-creds-server. If you do not know this value, contact your Okta admin")
-
-        client_id = self._get_user_input("Client ID", default_entry)
-        self._client_id = client_id
-
-        return client_id
 
     def _get_appurl_entry(self, default_entry):
         """ Get and validate app_url """

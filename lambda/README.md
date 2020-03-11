@@ -9,7 +9,6 @@ This service interacts with the Okta User and App APIs on behalf of the gimme-aw
 
 ### Environmental Variables
 To run the lambda, you'll need to pass in two environment variables:
-- `OKTA_API_KEY` A read-only Okta API key that will be used for the User and Apps APIs
 - `OKTA_ORG_URL` The Okta domain URL to use for API calls (e.g. https://example.okta.com)
 
 ### OAuth Token Authorizer

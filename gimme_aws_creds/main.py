@@ -221,72 +221,6 @@ class GimmeAWSCreds(object):
         return response['Credentials']
 
     @staticmethod
-    def _call_gimme_creds_server(okta_connection, gimme_creds_server_url):
-        """ Retrieve the user's AWS accounts from the gimme_creds_server"""
-        response = okta_connection.get(gimme_creds_server_url)
-
-        # Throw an error if we didn't get any accounts back
-        if not response.json():
-            raise errors.GimmeAWSCredsError("No AWS accounts found.")
-
-        return response.json()
-
-    @staticmethod
-    def _get_aws_account_info(okta_org_url, okta_api_key, username):
-        """ Call the Okta User API and process the results to return
-        just the information we need for gimme_aws_creds"""
-        # We need access to the entire JSON response from the Okta APIs, so we need to
-        # use the low-level ApiClient instead of UsersClient and AppInstanceClient
-        users_client = ApiClient(okta_org_url, okta_api_key, pathname='/api/v1/users')
-
-        # Get User information
-        try:
-            result = users_client.get_path('/{0}'.format(username))
-            user = result.json()
-        except OktaError as e:
-            if e.error_code == 'E0000007':
-                raise errors.GimmeAWSCredsError("Error: " + username + " was not found!")
-            else:
-                raise errors.GimmeAWSCredsError("Error: " + e.error_summary)
-
-        try:
-            # Get first page of results
-            result = users_client.get_path('/{0}/appLinks'.format(user['id']))
-            final_result = result.json()
-
-            # Loop through other pages
-            while 'next' in result.links:
-                result = users_client.get(result.links['next']['url'])
-                final_result = final_result + result.json()
-            ui.default.info("done\n")
-        except OktaError as e:
-            if e.error_code == 'E0000007':
-                raise errors.GimmeAWSCredsError("Error: No applications found for " + username)
-            else:
-                raise errors.GimmeAWSCredsError("Error: " + e.error_summary)
-
-        # Loop through the list of apps and filter it down to just the info we need
-        app_list = []
-        for app in final_result:
-            # All AWS connections have the same app name
-            if app['appName'] == 'amazon_aws':
-                new_app_entry = {
-                    'id': app['id'],
-                    'name': app['label'],
-                    'links': {
-                        'appLink': app['linkUrl'],
-                        'appLogo': app['logoUrl']
-                    }
-                }
-                app_list.append(new_app_entry)
-
-        # Throw an error if we didn't get any accounts back
-        if not app_list:
-            raise errors.GimmeAWSCredsError("No AWS accounts found.")
-
-        return app_list
-
-    @staticmethod
     def _parse_role_arn(arn):
         """ Extracts account number, path and role name from role arn string """
         matches = re.match(r"arn:(aws|aws-cn|aws-us-gov):iam:.*:(?P<accountid>\d{12}):role(?P<path>(/[\w/]+)?/)(?P<role>\S+)", arn)
@@ -566,16 +500,8 @@ class GimmeAWSCreds(object):
     def aws_results(self):
         if 'aws_results' in self._cache:
             return self._cache['aws_results']
-        # Call the Okta APIs and proces data locally
-        if self.gimme_creds_server == 'internal':
-            # Okta API key is required when calling Okta APIs internally
-            if self.config.api_key is None:
-                raise errors.GimmeAWSCredsError('OKTA_API_KEY environment variable not found!')
-            auth_result = self.okta.auth_session()
-            aws_results = self._get_aws_account_info(self.okta_org_url, self.config.api_key,
-                                                     auth_result['username'])
 
-        elif self.gimme_creds_server == 'appurl':
+        if self.gimme_creds_server == 'appurl':
             self.okta.auth_session()
             # bypass lambda & API call
             # Apps url is required when calling with appurl
@@ -593,28 +519,10 @@ class GimmeAWSCreds(object):
             }
             aws_results.append(new_app_entry)
 
-        # Use the gimme_creds_lambda service
+        # Use current session to fetch app list
         else:
-            if not self.conf_dict.get('client_id'):
-                raise errors.GimmeAWSCredsError('No OAuth Client ID in configuration.  Try running --config again.')
-            if not self.conf_dict.get('okta_auth_server'):
-                raise errors.GimmeAWSCredsError(
-                    'No OAuth Authorization server in configuration.  Try running --config again.')
-
-            # Authenticate with Okta and get an OAuth access token
-            self.okta.auth_oauth(
-                self.conf_dict['client_id'],
-                authorization_server=self.conf_dict['okta_auth_server'],
-                access_token=True,
-                id_token=False,
-                scopes=['openid']
-            )
-
-            # Add Access Tokens to Okta-protected requests
-            self.okta.use_oauth_access_token(True)
-
-            self.ui.info("Authentication Success! Calling Gimme-Creds Server...")
-            aws_results = self._call_gimme_creds_server(self.okta, self.gimme_creds_server)
+            self.okta.auth_session()
+            aws_results = self.okta.fetch_user_app()
 
         self._cache['aws_results'] = aws_results
         return aws_results

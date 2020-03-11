@@ -15,10 +15,6 @@ With gimme-aws-creds all you need to know is your username, password, Okta url a
 
 Python 3
 
-### Optional
-
-[Gimme-creds-lambda](https://github.com/Nike-Inc/gimme-aws-creds/tree/master/lambda) can be used as a proxy to the Okta APIs needed by gimme-aws-creds.  This removes the requirement of an Okta API key.  Gimme-aws-creds authenticates to gimme-creds-lambda using OpenID Connect and the lambda handles all interactions with the Okta APIs.  Alternately, you can set the `OKTA_API_KEY` environment variable and the `gimme_creds_server` configuration value to 'internal' to call the Okta APIs directly from gimme-aws-creds.
-
 ## Installation
 
 This is a Python 3 project.
@@ -84,11 +80,9 @@ A configuration wizard will prompt you to enter the necessary configuration para
 
 - conf_profile - This sets the Okta configuration profile name, the default is DEFAULT.
 - okta_org_url - This is your Okta organization url, which is typically something like `https://companyname.okta.com`.
-- okta_auth_server - [Okta API Authorization Server](https://help.okta.com/en/prev/Content/Topics/Security/API_Access.htm) used for OpenID Connect authentication for gimme-creds-lambda
-- client_id - OAuth client ID for gimme-creds-lambda
 - gimme_creds_server
   - URL for gimme-creds-lambda
-  - 'internal' for direct interaction with the Okta APIs (`OKTA_API_KEY` environment variable required)
+  - 'internal' for direct interaction with the Okta APIs
   - 'appurl' to set an aws application link url. This setting removes the need of an OKTA API key.
 - write_aws_creds - True or False - If True, the AWS credentials will be written to `~/.aws/credentials` otherwise it will be written to stdout.
 - cred_profile - If writing to the AWS cred file, this sets the name of the AWS credential profile.
@@ -121,22 +115,20 @@ Example file:
 
 ```ini
 [myprofile]
-client_id = myclient_id
+okta_username = john.doe@example.com
 ```
 
 Configurations can inherit from other configurations to share common configuration parameters.
 
 ```ini
 [my-base-profile]
-client_id = myclient_id
+okta_username = john.doe@example.com
 [myprofile]
 inherit = my-base-profile
 aws_rolename = my-role
 ```
 
 ## Usage
-
-**If you are not using gimme-creds-lambda nor using appurl settings, make sure you set the OKTA_API_KEY environment variable.**
 
 After running --action-configure, just run gimme-aws-creds. You will be prompted for the necessary information.
 
@@ -184,16 +176,14 @@ A list of values of to change with environment variables are:
 
 - `AWS_DEFAULT_DURATION` - corresponds to `aws_default_duration` configuration
 - `AWS_SHARED_CREDENTIALS_FILE` - file to write credentials to, points to `~/.aws/credentials` by default
-- `GIMME_AWS_CREDS_CLIENT_ID` - corresponds to `client_id` configuration
 - `GIMME_AWS_CREDS_CRED_PROFILE` - corresponds to `cred_profile` configuration
 - `GIMME_AWS_CREDS_OUTPUT_FORMAT` - corresponds to `output_format` configuration and `--output-format` CLI option
-- `OKTA_AUTH_SERVER` - corresponds to `okta_auth_server` configuration
 - `OKTA_DEVICE_TOKEN` - corresponds to `device_token` configuration, can be used in CI
 - `OKTA_MFA_CODE` - corresponds to `--mfa-code` CLI option
 - `OKTA_PASSWORD` - provides password during authentication, can be used in CI
 - `OKTA_USERNAME` - corresponds to `okta_username` configuration and `--username` CLI option
 
-Example: `GIMME_AWS_CREDS_CLIENT_ID='foobar' AWS_DEFAULT_DURATION=12345 gimme-aws-creds`
+Example: `AWS_DEFAULT_DURATION=12345 gimme-aws-creds`
 
 For changing variables outside of this, you'd need to create a separate profile altogether with `gimme-aws-creds --action-configure --profile profileName`
 

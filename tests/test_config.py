@@ -54,12 +54,12 @@ class TestConfig(unittest.TestCase):
         with open(test_ui.HOME + "/.okta_aws_login_config", "w") as config_file:
             config_file.write("""
 [myprofile]
-client_id = foo
+okta_username  = john.doe@example.com
 """)
         config = Config(gac_ui=test_ui, create_config=False)
         config.conf_profile = "myprofile"
         profile_config = config.get_config_dict()
-        self.assertEqual(profile_config, {"client_id": "foo"})
+        self.assertEqual(profile_config, {"okta_username": "john.doe@example.com"})
 
     def test_read_config_inherited(self):
         """Test to make sure getting config works when inherited"""
@@ -70,18 +70,18 @@ client_id = foo
         with open(test_ui.HOME + "/.okta_aws_login_config", "w") as config_file:
             config_file.write("""
 [mybase]
-client_id = bar
+okta_username  = john.doe@example.com
 aws_appname = baz
 [myprofile]
 inherits = mybase
-client_id = foo
+okta_username  = helen.doe@example.com
 aws_rolename = myrole
 """)
         config = Config(gac_ui=test_ui, create_config=False)
         config.conf_profile = "myprofile"
         profile_config = config.get_config_dict()
         self.assertEqual(profile_config, {
-            "client_id": "foo",
+            "okta_username": "helen.doe@example.com",
             "aws_appname": "baz",
             "aws_rolename": "myrole",
         })

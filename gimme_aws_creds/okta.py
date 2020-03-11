@@ -63,11 +63,6 @@ class OktaClient(object):
         self._mfa_code = None
         self._remember_device = None
 
-        self._use_oauth_access_token = False
-        self._use_oauth_id_token = False
-        self._oauth_access_token = None
-        self._oauth_id_token = None
-
         self._jar = requests.cookies.RequestsCookieJar()
 
         # Allow up to 5 retries on requests to Okta in case we have network issues
@@ -104,12 +99,6 @@ class OktaClient(object):
 
     def set_remember_device(self, remember_device):
         self._remember_device = bool(remember_device)
-
-    def use_oauth_access_token(self, val=True):
-        self._use_oauth_access_token = val
-
-    def use_oauth_id_token(self, val=True):
-        self._use_oauth_id_token = val
 
     def stepup_auth(self, embed_link, state_token=None):
         """ Login to Okta using the Step-up authentication flow"""
@@ -180,84 +169,6 @@ class OktaClient(object):
             "session": response.cookies['sid'],
             "device_token": self._http_client.cookies['DT']
         }
-
-    def auth_oauth(self, client_id, **kwargs):
-        """ Login to Okta and retrieve access token, ID token or both """
-        login_response = self.auth()
-
-        if 'access_token' not in kwargs:
-            access_token = True
-        else:
-            access_token = kwargs['access_token']
-
-        if 'id_token' not in kwargs:
-            id_token = False
-        else:
-            id_token = kwargs['id_token']
-
-        if 'scopes' not in kwargs:
-            scopes = ['openid']
-        else:
-            scopes = kwargs['scopes']
-
-        response_types = []
-        if id_token is True:
-            response_types.append('id_token')
-        if access_token is True:
-            response_types.append('token')
-
-        if 'authorization_server' not in kwargs:
-            oauth_url = self._okta_org_url + '/oauth2/v1/authorize'
-        else:
-            oauth_url = self._okta_org_url + '/oauth2/' + kwargs['authorization_server'] + '/v1/authorize'
-
-        if 'redirect_uri' not in kwargs:
-            redirect_uri = 'http://localhost:8080/login'
-        else:
-            redirect_uri = kwargs['redirect_uri']
-
-        if 'nonce' not in kwargs:
-            nonce = uuid.uuid4().hex
-        else:
-            nonce = kwargs['nonce']
-
-        if 'state' not in kwargs:
-            state = 'auth_oauth'
-        else:
-            state = kwargs['state']
-
-        params = {
-            'sessionToken': login_response['sessionToken'],
-            'client_id': client_id,
-            'redirect_uri': redirect_uri,
-            'nonce': nonce,
-            'state': state,
-            'response_type': ' '.join(response_types),
-            'scope': ' '.join(scopes)
-        }
-
-        response = self._http_client.get(
-            oauth_url,
-            params=params,
-            headers=self._get_headers(),
-            verify=self._verify_ssl_certs,
-            allow_redirects=False
-        )
-        response.raise_for_status()
-
-        url_parse_results = urlparse(response.headers['Location'])
-
-        query_result = parse_qs(url_parse_results.fragment)
-
-        tokens = {}
-        if 'access_token' in query_result:
-            tokens['access_token'] = query_result['access_token'][0]
-            self._oauth_access_token = query_result['access_token'][0]
-        if 'id_token' in query_result:
-            tokens['id_token'] = query_result['id_token'][0]
-            self._oauth_id_token = query_result['id_token'][0]
-
-        return tokens
 
     @staticmethod
     def _get_headers():
@@ -711,39 +622,6 @@ class OktaClient(object):
 
         return {'SAMLResponse': saml_response, 'RelayState': relay_state, 'TargetUrl': form_action}
 
-    def check_kwargs(self, kwargs):
-        if self._use_oauth_access_token is True:
-            if 'headers' not in kwargs:
-                kwargs['headers'] = {}
-            kwargs['headers']['Authorization'] = "Bearer {}".format(self._oauth_access_token)
-
-        if self._use_oauth_id_token is True:
-            if 'headers' not in kwargs:
-                kwargs['headers'] = {}
-            kwargs['headers']['Authorization'] = "Bearer {}".format(self._oauth_access_token)
-
-        return kwargs
-
-    def get(self, url, **kwargs):
-        """ Retrieve resource that is protected by Okta """
-        parameters = self.check_kwargs(kwargs)
-        return self._http_client.get(url, **parameters)
-
-    def post(self, url, **kwargs):
-        """ Create resource that is protected by Okta """
-        parameters = self.check_kwargs(kwargs)
-        return self._http_client.post(url, **parameters)
-
-    def put(self, url, **kwargs):
-        """ Modify resource that is protected by Okta """
-        parameters = self.check_kwargs(kwargs)
-        return self._http_client.put(url, **parameters)
-
-    def delete(self, url, **kwargs):
-        """ Delete resource that is protected by Okta """
-        parameters = self.check_kwargs(kwargs)
-        return self._http_client.delete(url, **parameters)
-
     def _choose_factor(self, factors):
         """ gets a list of available authentication factors and
         asks the user to select the factor they want to use """
@@ -840,3 +718,35 @@ class OktaClient(object):
             raise errors.GimmeAWSCredsError('Password was not provided. Exiting.')
 
         return {'username': username, 'password': password}
+
+    def fetch_user_app(self):
+        url = self._okta_org_url + \
+            '/api/v1/users/me/home/tabs?type=all&expand=items%2Citems.resource'
+
+        response = self._http_client.get(
+            url,
+            headers=self._get_headers(),
+            verify=self._verify_ssl_certs,
+            allow_redirects=False
+        )
+
+        # Loop through the list of apps and filter it down to just the info we need
+        appList = []
+        for tab in response.json():
+            # All AWS connections have the same app name
+            items = tab['_embedded']['items']
+            for item in items:
+                if item['_embedded']['resource']['appDisplayName'] == 'Amazon Web Services':
+                    newAppEntry = {}
+                    newAppEntry['id'] =  item['_embedded']['resource']['appInstanceId']
+                    newAppEntry['name'] = item['_embedded']['resource']['label']
+                    newAppEntry['links'] = {}
+                    newAppEntry['links']['appLink'] = item['_embedded']['resource']['linkUrl']
+                    newAppEntry['links']['appLogo'] = item['_embedded']['resource']['logoUrl']
+                    appList.append(newAppEntry)
+
+        # Throw an error if we didn't get any accounts back
+        if not appList:
+            raise errors.GimmeAWSCredsError("No AWS accounts found.")
+
+        return appList
