@@ -495,7 +495,7 @@ class GimmeAWSCreds(object):
             self.config.aws_default_duration = 3600
 
         # Inbound profile will set inbound flag
-        if self.conf_dict.get('inbound_profile') is not None:
+        if not self.conf_dict.get('inbound_profile') in (None, ''):
             self.config.inbound = True
 
         self.resolver = self.get_resolver()
@@ -804,7 +804,7 @@ class GimmeAWSCreds(object):
         return ret
 
     def fetch_inbound_saml_token(self):
-        if self.conf_dict.get('inbound_profile') is not None:
+        if not self.conf_dict.get('inbound_profile') in (None, ''):
             cmd = self.conf_dict.get('inbound_profile').split(" ")
             if cmd[0] == "{0}":
                 cmd[0] = sys.argv[0]
